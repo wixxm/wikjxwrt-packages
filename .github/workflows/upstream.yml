@@ -1,26 +1,42 @@
-#
-# This is free software, license use MIT.
-#
-# 
-# <https://github.com/your-username/your-repo>
-#
-
+name: Merge-upstream
 on:
+  push:
+    paths:
+      - '.github/workflows/upstream.yml'
+      - '.gitignore'
+      - '.github/diy/**'
   schedule:
-    - cron: '0 */12 * * *'  # 每12小时运行一次
+    - cron: 0 */12 * * *
   workflow_dispatch:
+    inputs:
+      ssh:
+        description: 'ssh'
+        required: false
+        default: 'true'
+  watch:
+    types: started
+  repository_dispatch:
 
 jobs:
   merge:
     if: github.event.repository.owner.id == github.event.sender.id || ! github.event.sender.id || github.event.sender.id == '119362912'
     runs-on: Ubuntu-22.04
 
-
     steps:
-    - name: Checkout the repository
-      uses: actions/checkout@v2
+    - name: Checkout
+      uses: actions/checkout@main
       with:
         fetch-depth: 0
+
+    - uses: de-vri-es/setup-git-credentials@v2
+      with:
+        credentials: https://kiddin9:${{ secrets.TOKEN_KIDDIN9 }}@github.com/
+    
+    - name: Set git identity
+      run : |
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global user.name "github-actions[bot]"
+        sudo timedatectl set-timezone "Asia/Shanghai"
 
     - name: Set up Git
       run: |
