@@ -82,7 +82,7 @@ jobs:
         (
         git_clone https://github.com/sirpdboy/luci-app-lucky oplucky && mv -f oplucky/*/ ./ && rm -rf oplucky
         git_clone https://github.com/sirpdboy/luci-app-ddns-go ddns-go1 && mvdir ddns-go1
-        git_clone https://github.com/sirpdboy/luci-app-poweroffdevice luci-app-poweroffdevice
+        git_clone https://github.com/sirpdboy/luci-app-poweroffdevice poweroffdevice
         git_clone https://github.com/vernesong/OpenClash && mv -n OpenClash/luci-app-openclash ./; rm -rf OpenClash
         git_clone https://github.com/wixxm/luci-app-netdata && mv -n luci-app-netdata/luci-app-netdata ./;rm -rf luci-app-netdata
         git_clone https://github.com/gSpotx2f/luci-app-cpu-status        
