@@ -17,7 +17,7 @@ on:
     types: started
   repository_dispatch:
 
-jobs:
+ jobs:
   merge:
     if: github.event.repository.owner.id == github.event.sender.id || ! github.event.sender.id || github.event.sender.id == '119362912'
     runs-on: Ubuntu-22.04
