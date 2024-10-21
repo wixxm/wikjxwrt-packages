@@ -1,3 +1,10 @@
+#
+# This is free software, lisence use MIT.
+# 
+# 
+# <https://github.com/kiddin9/openwrt-packages>
+#
+
 name: Merge-upstream
 on:
   push:
@@ -17,7 +24,7 @@ on:
     types: started
   repository_dispatch:
 
- jobs:
+jobs:
   merge:
     if: github.event.repository.owner.id == github.event.sender.id || ! github.event.sender.id || github.event.sender.id == '119362912'
     runs-on: Ubuntu-22.04
@@ -37,11 +44,6 @@ on:
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git config --global user.name "github-actions[bot]"
         sudo timedatectl set-timezone "Asia/Shanghai"
-
-    - name: Set up Git
-      run: |
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git config --global user.name "github-actions[bot]"
 
     - name: Clone the mihomo repository
       run: |
