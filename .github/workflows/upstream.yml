@@ -5,7 +5,6 @@
 # <https://github.com/your-username/your-repo>
 #
 
-name: Auto-Update-Mihomo
 on:
   schedule:
     - cron: '0 */12 * * *'  # 每12小时运行一次
@@ -44,7 +43,7 @@ jobs:
         git commit -m "Auto-update from morytyann/OpenWrt-mihomo"
         git push origin main  # 根据需要选择目标分支
       
-  - name: Apply
+   - name: Apply
       run: |
         Emoji=("🎉" "🤞" "✨" "🎁" "🎈" "🎄" "🎨" "💋" "🍓" "🍕" "🍉" "💐" "🌴" "🚀" "🛸" "🗽" "⛅" "🌈" "🔥" "⛄" "🐶" "🏅" "🦄" "🐤")
         git add .
