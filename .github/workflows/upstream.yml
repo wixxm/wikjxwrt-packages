@@ -89,9 +89,6 @@ jobs:
         git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config
         ) &
 
-    - name: SSH connection to Actions
-      uses: kiddin9/debugger-action@master
-      if: github.event.inputs.ssh == 'true'
 
     - name: Apply patches
       run: |
