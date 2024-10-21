@@ -1,33 +1,31 @@
-#
-# This is free software, lisence use MIT.
-# 
-# 
-# <https://github.com/kiddin9/openwrt-packages>
-#
+name: Sync packages
 
-name: Merge-upstream
 on:
   push:
     paths:
-      - '.github/workflows/upstream.yml'
-      - '.gitignore'
-      - '.github/diy/**'
+      - '.github/workflows/wall.yml'
+      - '.github/diy/main.sh'
   schedule:
-    - cron: 0 */12 * * *
+    - cron: 0 */4 * * *
+  repository_dispatch:
   workflow_dispatch:
     inputs:
-      ssh:
-        description: 'ssh'
+      packages:
+        description: 'packages'
         required: false
-        default: 'true'
-  watch:
-    types: started
-  repository_dispatch:
-
+        default: 'false'	
+permissions:
+  contents: write
 jobs:
-  merge:
-    if: github.event.repository.owner.id == github.event.sender.id || ! github.event.sender.id || github.event.sender.id == '119362912'
-    runs-on: Ubuntu-22.04
+  build:
+    if: github.event.repository.owner.id == github.event.sender.id || ! github.event.sender.id
+    runs-on: ubuntu-latest
+
+    name: Update ${{matrix.target}}
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [main]
 
     steps:
     - name: Checkout
@@ -35,35 +33,186 @@ jobs:
       with:
         fetch-depth: 0
 
-    - uses: de-vri-es/setup-git-credentials@v2
-      with:
-        credentials: https://kiddin9:${{ secrets.TOKEN_KIDDIN9 }}@github.com/
-    
-    - name: Set git identity
+    - name: Initialization environment
       run : |
-        git config --global user.email "419691642@qq.com"
+        git config --global user.email "wixxm@users.noreply.github.com"
         git config --global user.name "wixxm"
         sudo timedatectl set-timezone "Asia/Shanghai"
 
-    - name: Clone the mihomo repository
+    - name: Syn upstream
       run: |
-        git clone https://github.com/morytyann/OpenWrt-mihomo.git temp_mihomo
-        cd temp_mihomo
-        git fetch --all
-        git checkout main  # 根据需要选择分支
+        shopt -s extglob
+        set +e
+        git rm -r --cache * >/dev/null 2>&1 &
+        rm -rf `find ./* -maxdepth 0 -type d ! -name ".github/diy"` >/dev/null 2>&1
+        function git_clone() {
+          git clone --depth 1 $1 $2
+          if [ "$?" != 0 ]; then
+            echo "error on $1"
+            pid="$( ps -q $$ )"
+            kill $pid
+          fi
+        }
+        function git_sparse_clone() {
+        trap 'rm -rf "$tmpdir"' EXIT
+        branch="$1" curl="$2" && shift 2
+        rootdir="$PWD"
+        tmpdir="$(mktemp -d)" || exit 1
+        if [ ${#branch} -lt 10 ]; then
+        git clone -b "$branch" --depth 1 --filter=blob:none --sparse "$curl" "$tmpdir"
+        cd "$tmpdir"
+        else
+        git clone --filter=blob:none --sparse "$curl" "$tmpdir"
+        cd "$tmpdir"
+        git checkout $branch
+        fi
+        if [ "$?" != 0 ]; then
+            echo "error on $curl"
+            exit 1
+        fi
+        git sparse-checkout init --cone
+        git sparse-checkout set "$@"
+        mv -n $@ $rootdir/ || true
+        cd $rootdir
+        }
+        function mvdir() {
+        mv -n `find $1/* -maxdepth 0 -type d` ./
+        rm -rf $1
+        }
+        (
+        git_clone https://github.com/sirpdboy/luci-app-lucky oplucky && mv -f oplucky/*/ ./ && rm -rf oplucky
+        git_clone https://github.com/sirpdboy/luci-app-ddns-go ddns-go1 && mvdir ddns-go1
+        git_clone https://github.com/sirpdboy/luci-app-poweroffdevice
+        git_clone https://github.com/vernesong/OpenClash && mv -n OpenClash/luci-app-openclash ./; rm -rf OpenClash
+        git_clone https://github.com/sirpdboy/luci-app-netdata        
+        git_clone https://github.com/gSpotx2f/luci-app-cpu-status        
+        ) &
 
-    - name: Copy updates to the repository
-      run: |
-        cp -r temp_mihomo/* .  # 将更新的文件复制到当前工作区
-        rm -rf temp_mihomo  # 删除临时目录
+    - name: SSH connection to Actions
+      uses: kiddin9/debugger-action@master
+      if: github.event.inputs.ssh == 'true'
 
-    - name: Commit and Push changes
+    - name: Apply patches
       run: |
-        git add .
-        git commit -m "Auto-update from morytyann/OpenWrt-mihomo"
-        git push origin main  # 根据需要选择目标分支
-      
-   - name: Apply
+        find ".github/diy/patches" -type f -name '*.patch' -print0 | sort -z | xargs -I % -t -0 -n 1 sh -c "cat '%'  | patch -d './' -p1 -E --forward --no-backup-if-mismatch" || (curl -k --data chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" --data "text=❌ 软件包更新失败 😂 https://github.com/kiddin9/openwrt-packages/actions" "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage";exit 1)
+
+    - name: Modify
+      run: |
+        shopt -s extglob
+        set +e
+        sed -i \
+        -e "s/\(network\..*\)\.ifname/\1.device/g" \
+        `find \( -path "*/root/*" -o -path "*/files/*" -o -path "*/luasrc/*" \) ! -path "./base-files/*" ! -path "./dnsmasq/*" ! -path "./luci-base/*" ! -path "./ppp/*" -type f` &
+        sed -i -e "s/\(killall .*\)-[0-9] /\1-3 /g" \
+        -e "s/killall \([^-]+*\)/killall -3 \1/g" \
+        `find \( -path "*/files/root/etc/init.d/*" -o -path "*/root/etc/init.d/*" -o -path "*/files/*.init" \) -type f` &
+        wget https://github.com/xiechangan123/luci-i18n-xray-zh-cn/raw/main/po/zh-cn/xray.zh-cn.po -P luci-app-xray/po/zh_Hans/
+        (
+        function latest() {
+          (curl -gs -H 'Content-Type: application/json' \
+             -H "Authorization: Bearer ${{ secrets.TOKEN_KIDDIN9 }}" \
+             -X POST -d '{ "query": "query {repository(owner: \"'"$1"'\", name: \"'"$2"'\"){latestRelease{tagName tagCommit{oid}}refs(refPrefix:\"refs/tags/\",last:1,orderBy:{field:TAG_COMMIT_DATE,direction:ASC}){edges{node{name target{oid}}}}defaultBranchRef{target{...on Commit {oid}}}}}"}' https://api.github.com/graphql)
+        }
+        for pkg in $(ls !(luci-*|cloudflared|dnsproxy|joker|gost|aic8800|headscale|aria2|mihomo|netmaker-openwrt|hickory-dns|frp|libcryptopp|toml11|chinadns-ng|ddns-go|libtorrent-rasterbar|ua2f|homebox|xtables-wgobfs|nexttrace|tuic-server|subconverter|softethervpn5|shadowsocksr-libev|mt76|sub-web|mmdvm-host|alist|curl|qBittorrent-Enhanced-Edition|libwxwidgets|ysf-clients|natter|fullconenat|v2raya|r8152|amule|brook|3proxy|containerd|oscam|netmaker|n2n_v2|naiveproxy|miniupnpd-nft|upx|netdata|tailscale|mosdns|coremark|mbedtls|quickjspp|accel-ppp)/Makefile); do
+          repo="$(grep ^PKG_SOURCE_URL $pkg | grep github | cut -f 4-5 -d '/' | sed -e 's/.git//' | grep -E '[0-9a-zA-Z_-]+$')" || true
+          if [ "$repo" ]; then
+            owner="$(echo $repo | cut -f 1 -d '/')"
+            name="$(echo $repo | cut -f 2 -d '/')"
+            latest="$(latest $owner $name)"
+            sed -i "s/PKG_SOURCE_VERSION:=.*/PKG_SOURCE_VERSION:=$(echo $latest | jq -r '.data.repository.defaultBranchRef.target.oid')/" $pkg || true
+            over="$(grep -E PKG_VERSION:=.*$ $pkg | cut -f 2 -d '=' | sed -e 's/^\(v\|release-\)//' | grep -E "[0-9]")" || true
+            if [ "$over" ]; then
+              ver="$(echo $latest | jq -r '.data.repository.latestRelease.tagName' | sed -e 's/^\(v\|release-\)//' | grep -E "^[^()]*$" | grep -E "[0-9]")" || true
+              # [ "$ver" ] || ver="$(git ls-remote --tags git://github.com/$repo | cut -d/ -f3- | sort -t. -nk1,3 | awk '/^[^{]*$/{version=$1}END{print version}' | grep -o -E "[0-9].*")" || true
+              echo "$repo-$over-$ver"
+              if [ "$ver" ]; then
+                function version_lt() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" != "$1"; }
+                if version_lt "$over" "$ver"; then
+                  latest="$(echo $latest | jq -r '.data.repository.latestRelease.tagCommit.oid' || echo $latest | jq -r '.data.repository.refs.edges[-1].node.target.oid')"
+                  sed -i -e "s/PKG_SOURCE_VERSION:=.*/PKG_SOURCE_VERSION:=$latest/" \
+                         -e "s/PKG_VERSION:=.*/PKG_VERSION:=$ver/" $pkg || true
+                fi || true
+              fi
+            fi
+          fi
+        done
+        touch /tmp/ok
+        ) &
+        
+        (
+        for pkg in $(find -maxdepth 1 -type d -name "luci-*" ! -name "luci-app-dockerman" ! -name "luci-app-store"); do
+          if [ "$(grep "luci.mk" $pkg/Makefile)" ]; then
+            sed -i '/\(PKG_VERSION\|PKG_RELEASE\):=/d' $pkg/Makefile
+          fi
+          sed -i 's/"nas"/"system"/g' luci-app-fileassistant/luasrc/controller/fileassistant.lua
+          sed -i 's/admin\/nas/admin\/system/g' luci-app-fileassistant/htdocs/luci-static/resources/fileassistant/fb.js
+          grep -q '"nas",' $pkg/luasrc/controller/*.lua && ! grep -q '_("NAS")' $pkg/luasrc/controller/*.lua &&
+            sed -i 's/ index()/ index()\n\tentry({"admin", "nas"}, firstchild(), _("NAS") , 45).dependent = false/' $pkg/luasrc/controller/*.lua
+        done
+        ) &
+
+        (
+        for pkg in $(ls -d */); do
+          if [[ "$(grep "PKG_VERSION" $pkg/Makefile)" && ! "$(grep "PKG_RELEASE" $pkg/Makefile)" ]]; then
+            sed -i "s/\(PKG_VERSION:=.*\)/\1\nPKG_RELEASE:=/" $pkg/Makefile || true
+          fi
+          if [ "$(grep "PKG_RELEASE" $pkg/Makefile)" ]; then
+            sed -i "s/PKG_RELEASE:=.*/PKG_RELEASE:=$(git rev-list --count main $pkg)/" $pkg/Makefile || true
+          fi
+        done
+        touch /tmp/ok2
+        ) &
+
+        (
+        bash .github/diy/create_acl_for_luci.sh -a >/dev/null 2>&1 || true
+        bash .github/diy/convert_translation.sh -a >/dev/null 2>&1 || true
+        
+        #sed -i 's?"http://" + window.location.hostname?window.location.protocol + "//" + window.location.hostname?g' `find luci-app*/luasrc/view/ -maxdepth 2 -name "*.htm"`
+        sed -i 's/+rclone\( \|$\)/+rclone +fuse-utils\1/g' luci-app-rclone/Makefile
+        sed -i 's/\(+luci-compat\)/\1 +luci-theme-argon/' luci-app-argon-config/Makefile
+        sed -i 's/ +uhttpd-mod-ubus//' luci-app-packet-capture/Makefile
+        sed -i '/boot()/,+2d' ddns-scripts/files/etc/init.d/ddns
+        sed -i "/DISTRIB_DESCRIPTION/c\DISTRIB_DESCRIPTION=\"%D %C by Kiddin'\"" base-files/files/etc/openwrt_release
+        sed -i "s/default n/default y/" dockerd/Config.in
+        sed -i "/+uhttpd/d" ariang/Makefile
+        sed -i -e '$a /etc/bench.log' \
+        -e '/\/etc\/profile/d' \
+        -e '/\/etc\/shinit/d' \
+        base-files/files/lib/upgrade/keep.d/base-files-essential
+        sed -i -e '/^\/etc\/profile/d' \
+        -e '/^\/etc\/shinit/d' \
+        base-files/Makefile
+        sed -i '$a cgi-timeout = 300' uwsgi/files-luci-support/luci-webui.ini
+        sed -i '$a cgi-timeout = 300' uwsgi/files-luci-support/luci-cgi_io.ini
+        sed -i '/limit-as/c\limit-as = 5000' uwsgi/files-luci-support/luci-webui.ini
+        sed -i 's/procd_set_param stderr 1/procd_set_param stderr 0/' uwsgi/files/uwsgi.init
+        mkdir -p luci-app-passwall/root/www/luci-static/passwall luci-app-passwall2/root/www/luci-static/passwall2 luci-app-ssr-plus/root/www/luci-static/shadowsocksr
+        cp -rf luci-app-bypass/root/www/luci-static/bypass/* luci-app-passwall/root/www/luci-static/passwall/
+        cp -rf luci-app-bypass/root/www/luci-static/bypass/* luci-app-passwall2/root/www/luci-static/passwall2/
+        cp -rf luci-app-bypass/root/www/luci-static/bypass/* luci-app-ssr-plus/root/www/luci-static/shadowsocksr/
+        echo "#page>div:first-child{display:none}
+        button.btn_styles.color1:last-child{display:none}" >>luci-app-quickstart/htdocs/luci-static/quickstart/style.css
+        sed -i '/\/etc\/init\.d\/tailscale/d;/\/etc\/config\/tailscale/d;' tailscale/Makefile
+        
+        sed -i \
+          -e 's?include \.\./\.\./\(lang\|devel\)?include $(TOPDIR)/feeds/packages/\1?' \
+          -e "s/\(\(^\| \|	\)\(PKG_HASH\|PKG_MD5SUM\|PKG_MIRROR_HASH\|HASH\):=\).*/\1skip/" \
+          -e 's?\.\./\.\./luci.mk?$(TOPDIR)/feeds/luci/luci.mk?' \
+          -e 's/+ca-certificates/+ca-bundle/' \
+          -e 's/php7/php8/g' \
+          -e 's/+docker\( \|$\)/+docker +dockerd /g' \
+          -e 's/+iptables-zz-legacy\( \|$\)//g' \
+          -e 's/+ip6tables-zz-legacy\( \|$\)//g' \
+          -e 's/URL:=@IMMORTALWRT/URL:=https:\/\/mirror2.immortalwrt.org\/sources/g' \
+          */Makefile
+        ) &
+        
+        while [[ ! -f /tmp/ok ||  ! -f /tmp/ok2 ]]; do
+            echo "wait"
+          sleep 1
+        done
+
+    - name: Apply
       run: |
         Emoji=("🎉" "🤞" "✨" "🎁" "🎈" "🎄" "🎨" "💋" "🍓" "🍕" "🍉" "💐" "🌴" "🚀" "🛸" "🗽" "⛅" "🌈" "🔥" "⛄" "🐶" "🏅" "🦄" "🐤")
         git add .
