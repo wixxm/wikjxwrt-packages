@@ -1,5 +1,7 @@
-![kenzo github stats](https://github-readme-stats.vercel.app/api?username=wixxm&show_icons=true&theme=merko)
-            <div align="center">
+<div align="center">
+  ![kenzo_github_stats](https://github-readme-stats.vercel.app/api?username=wixxm&show_icons=true&theme=merko)
+</div>
+<div align="center">
 <h1 align="center">同步上游分支代码</h1>
 <img src="https://img.shields.io/github/issues/wixxm/wikjxwrt-packages?color=green">
 <img src="https://img.shields.io/github/stars/wixxm/wikjxwrt-packages?color=yellow">
