@@ -27,7 +27,11 @@
  sed -i '$a src-git wikjxwrt https://github.com/wixxm/wikjxwrt-packages' feeds.conf.default
 ```
 #### 🛸 特别注意 🛸
-*  使用Openwrt23.05官方源码编译luci-app-netdata插件时，需要将openwrt官方源码中/openwrt/feeds/packages/admin/netdata这个文件夹删除避免编译冲突。
+*  使用Openwrt23.05.5(快照版除外，其他版本没有测试)官方源码编译luci-app-passwall时，需要把golang切换为最新版，否则会出现一些插件编译失败。
+  ```shell
+rm -rf feeds/packages/lang/golang
+git clone https://github.com/wixxm/WikjxWrt-golang feeds/packages/lang/golang
+```
 
 *  使用Openwrt23.05官方源码编译luci-app-passwall插件时，需要将make menuconfig配置中取消dnsmasq保留dnsmasq-full避免冲突。
 
