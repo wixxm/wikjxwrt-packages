@@ -20,10 +20,6 @@ define Package/$(PKG_NAME)/install
 	$(INSTALL_DATA) ./luasrc/view/admin_system/ota.htm $(1)/usr/lib/lua/luci/view/admin_system/ota.htm
 	$(INSTALL_DATA) ./luasrc/view/admin_system/ota_flashing.htm $(1)/usr/lib/lua/luci/view/admin_system/ota_flashing.htm
 
-	# 安装翻译文件
-	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/i18n
-	po2lmo ./po/zh_Hans/ota.po $(1)/usr/lib/lua/luci/i18n/ota.zh_Hans.lmo
-
 	# 安装 /bin/ota 可执行文件
 	$(INSTALL_DIR) $(1)/bin
 	$(INSTALL_BIN) ./root/bin/ota $(1)/bin/ota
