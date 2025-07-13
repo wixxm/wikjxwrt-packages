@@ -22,12 +22,12 @@ proxy_fake_ip_ping_hijack=$(uci -q get nikki.proxy.fake_ip_ping_hijack); [ -z "$
 
 mixin_api_port=$(uci -q get nikki.mixin.api_port); [ -n "$mixin_api_port" ] && {
 	uci del nikki.mixin.api_port
-	uci set nikki.mixin.api_listen=[::]:$mixin_api_port
+	uci set nikki.mixin.api_listen="[::]:$mixin_api_port"
 }
 
 mixin_dns_port=$(uci -q get nikki.mixin.dns_port); [ -n "$mixin_dns_port" ] && {
 	uci del nikki.mixin.dns_port
-	uci set nikki.mixin.dns_listen=[::]:$mixin_dns_port
+	uci set nikki.mixin.dns_listen="[::]:$mixin_dns_port"
 }
 
 # since v1.22.0
@@ -70,8 +70,8 @@ proxy_transparent_proxy=$(uci -q get nikki.proxy.transparent_proxy); [ -n "$prox
 				uci add nikki lan_access_control
 				uci set nikki.@lan_access_control[-1].enabled=1
 				uci add_list nikki.@lan_access_control[-1].ip="$ip"
-				[ "$proxy_access_control_mode" == "allow" ] && uci set nikki.@lan_access_control[-1].proxy=1
-				[ "$proxy_access_control_mode" == "block" ] && uci set nikki.@lan_access_control[-1].proxy=0
+				[ "$proxy_access_control_mode" = "allow" ] && uci set nikki.@lan_access_control[-1].proxy=1
+				[ "$proxy_access_control_mode" = "block" ] && uci set nikki.@lan_access_control[-1].proxy=0
 			done
 		}
 		proxy_acl_ip6=$(uci -q get nikki.proxy.acl_ip6); [ -n "$proxy_acl_ip6" ] && {
@@ -79,8 +79,8 @@ proxy_transparent_proxy=$(uci -q get nikki.proxy.transparent_proxy); [ -n "$prox
 				uci add nikki lan_access_control
 				uci set nikki.@lan_access_control[-1].enabled=1
 				uci add_list nikki.@lan_access_control[-1].ip6="$ip6"
-				[ "$proxy_access_control_mode" == "allow" ] && uci set nikki.@lan_access_control[-1].proxy=1
-				[ "$proxy_access_control_mode" == "block" ] && uci set nikki.@lan_access_control[-1].proxy=0
+				[ "$proxy_access_control_mode" = "allow" ] && uci set nikki.@lan_access_control[-1].proxy=1
+				[ "$proxy_access_control_mode" = "block" ] && uci set nikki.@lan_access_control[-1].proxy=0
 			done
 		}
 		proxy_acl_mac=$(uci -q get nikki.proxy.acl_mac); [ -n "$proxy_acl_mac" ] && {
@@ -88,8 +88,8 @@ proxy_transparent_proxy=$(uci -q get nikki.proxy.transparent_proxy); [ -n "$prox
 				uci add nikki lan_access_control
 				uci set nikki.@lan_access_control[-1].enabled=1
 				uci add_list nikki.@lan_access_control[-1].mac="$mac"
-				[ "$proxy_access_control_mode" == "allow" ] && uci set nikki.@lan_access_control[-1].proxy=1
-				[ "$proxy_access_control_mode" == "block" ] && uci set nikki.@lan_access_control[-1].proxy=0
+				[ "$proxy_access_control_mode" = "allow" ] && uci set nikki.@lan_access_control[-1].proxy=1
+				[ "$proxy_access_control_mode" = "block" ] && uci set nikki.@lan_access_control[-1].proxy=0
 			done
 		}
 	}
@@ -109,6 +109,39 @@ proxy_transparent_proxy=$(uci -q get nikki.proxy.transparent_proxy); [ -n "$prox
 	uci del nikki.proxy.bypass_group
 	uci del nikki.proxy.bypass_cgroup
 }
+
+# since v1.23.0
+routing=$(uci -q get nikki.routing); [ -z "$routing" ] && {
+	uci set nikki.routing=routing
+	uci set nikki.routing.tproxy_fw_mark=0x80
+	uci set nikki.routing.tun_fw_mark=0x81
+	uci set nikki.routing.tproxy_rule_pref=1024
+	uci set nikki.routing.tun_rule_pref=1025
+	uci set nikki.routing.tproxy_route_table=80
+	uci set nikki.routing.tun_route_table=81
+	uci set nikki.routing.cgroup_id=0x12061206
+	uci set nikki.routing.cgroup_name=nikki
+}
+
+proxy_tun_timeout=$(uci -q get nikki.proxy.tun_timeout); [ -z "$proxy_tun_timeout" ] && uci set nikki.proxy.tun_timeout=30
+
+proxy_tun_interval=$(uci -q get nikki.proxy.tun_interval); [ -z "$proxy_tun_interval" ] && uci set nikki.proxy.tun_interval=1
+
+# since v1.23.1
+uci show nikki | grep -o -E 'nikki.@router_access_control\[[[:digit:]]+\]=router_access_control' | cut -d '=' -f 1 | while read -r router_access_control; do
+	for cgroup in $(uci -q get "$router_access_control.cgroup"); do
+		[ -d "/sys/fs/cgroup/$cgroup" ] && continue
+		[ -d "/sys/fs/cgroup/services/$cgroup" ] && {
+			uci del_list "$router_access_control.cgroup=$cgroup"
+			uci add_list "$router_access_control.cgroup=services/$cgroup"
+		}
+	done
+done
+
+# since v1.23.2
+env_disable_safe_path_check=$(uci -q get nikki.env.disable_safe_path_check); [ -n "$env_disable_safe_path_check" ] && uci del nikki.env.disable_safe_path_check
+
+env_skip_system_ipv6_check=$(uci -q get nikki.env.skip_system_ipv6_check); [ -z "$env_skip_system_ipv6_check" ] && uci set nikki.env.skip_system_ipv6_check=0
 
 # commit
 uci commit nikki
