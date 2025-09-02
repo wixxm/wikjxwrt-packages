@@ -1,3 +1,0 @@
-
-config ota 'config'
-	option api_url 'https://raw.githubusercontent.com/wixxm/wikjxwrt/refs/heads/api/fw.json'
